@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 retry_config=types.HttpRetryOptions(
-    attempts=2,  
+    attempts=3,  
     exp_base=7,  
     initial_delay=1,
     http_status_codes=[429, 500, 503, 504]
@@ -73,8 +73,9 @@ class GearRecommendationWorker(BaseAgent):
             instruction=f"""
                 You are an expert in sports gear recommendations. 
                 The gear item you need to recommend is: "{item_name}". Recommend products only for this item.
-                For this gear item, perform research using google_search and suggest 2-3 specific products, 
+                For this gear item, perform research using google_search and suggest 3 specific products, 
                 including their names, brief descriptions, and estimated prices.
+                Provide links to purchase if possible.
                 Ensure recommendations are suitable for beginners.
                 Provide your response in a clear format.
             """,
@@ -208,22 +209,45 @@ class GearRecommendationCoordinator(BaseAgent):
             actions=EventActions(escalate=True)
         )
 
+# Sequential agent that runs research -> summarize -> recommendations in order
+sport_workflow_agent = SequentialAgent(
+    name='SportWorkflowAgent',
+    sub_agents=[
+        sport_research_agent,
+        gear_summarize_agent,
+        GearRecommendationCoordinator(name='GearRecommendationCoordinator')
+    ]
+)
+
 root_agent = Agent(
     model=model,
     name='root_agent',
-    description='A helpful assistant for user questions about getting into new sports.',
+    description='A conversational assistant that helps users get into new sports by gathering requirements and providing detailed guidance.',
     instruction="""
-        You are an assistant, which helps users get into new sports. Your goal is to provide a comprehensive introduction to the sport to the user and to achieve the goal you must coordinate other agents.
-        1. First, you MUST call the 'SportResearchAgent' to find important information about the sport, what is needed to start doing it in terms of athlete requirements and in terms of gear. MUST WAIT FOR ITS COMPLETION.
-        2. Next, you MUST call the 'GearSummarizeAgent' to get a list of needed gear. MUST WAIT FOR ITS COMPLETION.
-        3. Next, you MUST call the 'GearRecommendationCoordinator' which will get concrete gear recommendations for first 3 items in parallel. WAIT FOR ITS COMPLETION.
-        4. After ALL agents complete, you MUST compile all the information you have gathered into a clear and organized response to the user, including:
-           - Athlete requirements
-           - Full necessary gear list
-           - Concrete gear recommendations with product details
+        You are a friendly and knowledgeable assistant helping users get into new sports.
         
-        IMPORTANT: Do not stop after calling the agents. You must provide a final comprehensive response to the user.
+        When a user expresses interest in a sport (e.g., "I want to start running"), you should:
+        
+        1. FIRST, ask clarifying questions to understand their needs better. DO NOT immediately call any tools. Ask questions like:
+           - What type of [sport] are they interested in? (e.g., road running, trail running, marathon training)
+           - Do they have any prior experience with endurance sports or similar activities?
+           - What are their goals? (e.g., fitness, competition, social, weight loss)
+           - What is their current fitness level?
+           - Are there any constraints? (e.g., budget, time, injuries)
+        
+        2. ONLY AFTER gathering sufficient information from the user, call the 'SportWorkflowAgent' tool with a detailed description including:
+           - The specific type of sport they want to do
+           - Their experience level
+           - Their goals
+           - Any relevant constraints
+        
+        3. After the SportWorkflowAgent completes, provide a final personalized summary to the user based on:
+           - The research findings
+           - The gear recommendations
+           - Their specific goals and constraints
+        
+        Be conversational and helpful. Don't overwhelm the user with too many questions at once - ask up to 2 key questions first.
     """,
-    tools=[AgentTool(sport_research_agent), AgentTool(gear_summarize_agent), AgentTool(GearRecommendationCoordinator(name='GearRecommendationCoordinator'))]
+    tools=[AgentTool(sport_workflow_agent)]
 )
 
