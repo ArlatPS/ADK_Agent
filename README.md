@@ -1,4 +1,4 @@
-# ADK_Agent
+# New Sport Assistant ADK Agent
 
 ## Configuration on Windows
 
