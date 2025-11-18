@@ -1,6 +1,6 @@
 # ADK_Agent
 
-## Startup Windows
+## Configuration on Windows
 
 ```commandline
 python -m venv .venv
@@ -10,14 +10,15 @@ python -m venv .venv
 .venv\Scripts\activate.bat
 ```
 
-```commandline
-adk run my_agent
-```
+## Running the Web App (API_KEY in .env file)
 
 ```commandline
 adk web --port 8000
 ```
 
-i want to start running
-trail, for ultra event 50km + 5000 elevation
-no running now, but large mountaineering experience
+## Running example sessions (with InMemorySessionService and logging)
+
+```commandline
+set GOOGLE_API_KEY=your-api-key-here
+python ./new_sport_agent/run_session.py
+```

@@ -19,7 +19,6 @@ model = Gemini(
     retry_options=retry_config
 )
 
-
 sport_research_agent = Agent(
     model=model,
     name='SportResearchAgent',
