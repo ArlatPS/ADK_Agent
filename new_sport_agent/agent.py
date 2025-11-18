@@ -15,7 +15,7 @@ retry_config=types.HttpRetryOptions(
 )
 
 model = Gemini(
-    model='gemini-2.5-flash-lite',
+    model='gemini-2.5-flash',
     retry_options=retry_config
 )
 
@@ -61,10 +61,8 @@ class GearRecommendationWorker(BaseAgent):
         
         logger.info(f"[{self.name}] Starting recommendation search for: {self._gear_item}")
         
-        # Use the gear item passed during initialization
         item_name = self._gear_item
 
-        # Create an agent for this specific item
         logger.info(f"[{self.name}] Creating agent for gear item: {item_name}")
         agent = Agent(
             model=model,
@@ -82,7 +80,6 @@ class GearRecommendationWorker(BaseAgent):
             tools=[google_search]
         )
         
-        # Run the agent and collect its output
         logger.info(f"[{self.name}] Running agent to get recommendations...")
         recommendation_text = ""
         async for event in agent.run_async(ctx):
@@ -94,7 +91,6 @@ class GearRecommendationWorker(BaseAgent):
         
         logger.info(f"[{self.name}] Completed recommendations for {item_name}. Text: {recommendation_text[:300]}")
         
-        # Store the result in session state
         state_key = f"recommendation:{self._run_id}:{self.name}"
         logger.info(f"[{self.name}] Storing result in session state with key: {state_key}")
         
@@ -117,7 +113,6 @@ class GearRecommendationCoordinator(BaseAgent):
     async def _run_async_impl(self, ctx):
         from google.adk.events import Event, EventActions
         
-        # Get the gear list from session state
         gear_list_str = ctx.session.state.get('gear_list', '')
         
         logger.info(f"[GearRecommendationCoordinator] Retrieved gear_list from state: {gear_list_str[:200]}...")
@@ -133,31 +128,23 @@ class GearRecommendationCoordinator(BaseAgent):
             )
             return
         
-        # Parse the comma-separated list of gear items
-        # Only split on commas followed by capital letters or newlines to avoid splitting descriptions
         gear_items = [item.strip() for item in gear_list_str.split('\n') if item.strip()]
         
-        # If no newlines found, try comma separation
         if len(gear_items) <= 1:
             gear_items = [item.strip() for item in gear_list_str.split(',')]
         
-        # Filter out empty items and items that look like continuation text (lowercase start)
         gear_items = [item for item in gear_items if item and (item[0].isupper() or item[0].isdigit())]
         
         logger.info(f"[GearRecommendationCoordinator] Parsed {len(gear_items)} gear items: {gear_items}")
         
-        # Limit to first 3 items as per root agent instruction
         gear_items = gear_items[:3]
         
         logger.info(f"[GearRecommendationCoordinator] Processing first 3 items: {gear_items}")
         
-        # Generate a unique run ID
         run_id = secrets.token_hex(2)
         
-        # Create state delta for the run
         state_delta = {"current_recommendation_run": run_id}
         
-        # Announce the parallel work
         yield Event(
             author=self.name,
             content=types.Content(
@@ -167,7 +154,6 @@ class GearRecommendationCoordinator(BaseAgent):
             actions=EventActions(state_delta=state_delta)
         )
         
-        # Create worker agents for each gear item
         workers = [
             GearRecommendationWorker(
                 name=f'GearRec_{idx}',
@@ -177,7 +163,6 @@ class GearRecommendationCoordinator(BaseAgent):
             for idx, item_name in enumerate(gear_items)
         ]
         
-        # Create and run ParallelAgent
         parallel = ParallelAgent(
             name=f'ParallelGearRecs_{run_id}',
             sub_agents=workers
@@ -188,7 +173,6 @@ class GearRecommendationCoordinator(BaseAgent):
         
         logger.info(f"[GearRecommendationCoordinator] Parallel execution completed")
         
-        # Collect all recommendations from session state
         recommendations = []
         for idx in range(len(gear_items)):
             rec_key = f"recommendation:{run_id}:GearRec_{idx}"
@@ -199,7 +183,6 @@ class GearRecommendationCoordinator(BaseAgent):
         all_recs = "\n\n".join(recommendations)
         logger.info(f"[GearRecommendationCoordinator] Collected {len(recommendations)} recommendations")
         
-        # Signal completion with all recommendations compiled
         yield Event(
             author=self.name,
             content=types.Content(
@@ -209,7 +192,6 @@ class GearRecommendationCoordinator(BaseAgent):
             actions=EventActions(escalate=True)
         )
 
-# Sequential agent that runs research -> summarize -> recommendations in order
 sport_workflow_agent = SequentialAgent(
     name='SportWorkflowAgent',
     sub_agents=[
@@ -243,7 +225,7 @@ root_agent = Agent(
         
         3. After the SportWorkflowAgent completes, provide a final personalized summary to the user based on:
            - The research findings
-           - The gear recommendations
+           - The gear recommendations - make sure you list the gear items clearly and if 'SportWorkflowAgent' provided links to purchase, include those as well. Pick the best option based on user answers and recommend it.
            - Their specific goals and constraints
         
         Be conversational and helpful. Don't overwhelm the user with too many questions at once - ask up to 2 key questions first.
